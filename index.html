@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tech Hub — Operations Dashboard</title>
+<meta name="description" content="Tech Hub KPI &amp; SLA Dashboard">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+
+<!-- ===== GATE: VIEWER PASSWORD ===== -->
+<div id="viewer-gate" class="gate-screen">
+  <div class="gate-card">
+    <div class="gate-brand">
+      <div class="gate-mark">TH</div>
+      <div class="gate-title">Tech Hub</div>
+      <div class="gate-sub">Operations Dashboard</div>
+    </div>
+    <div class="gate-form">
+      <label for="viewer-pwd">Access password</label>
+      <input id="viewer-pwd" type="password" autocomplete="off" placeholder="Enter password">
+      <button id="viewer-submit">Open dashboard</button>
+      <div id="viewer-err" class="gate-err"></div>
+    </div>
+    <div class="gate-foot">Alkhorayef Petroleum Company · Internal use only</div>
+  </div>
+</div>
+
+<!-- ===== APP SHELL ===== -->
+<div id="app" class="app hidden">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sb-brand">
+      <div class="sb-mark">TH</div>
+      <div>
+        <div class="sb-title">Tech Hub</div>
+        <div class="sb-sub">Ops Dashboard</div>
+      </div>
+    </div>
+
+    <nav class="sb-nav">
+      <a href="#/dashboard" class="sb-link" data-page="dashboard">
+        <span class="sb-icon">▤</span> Dashboard
+      </a>
+      <a href="#/yoy" class="sb-link" data-page="yoy">
+        <span class="sb-icon">≈</span> Year-over-Year
+      </a>
+      <a href="#/sla" class="sb-link" data-page="sla">
+        <span class="sb-icon">✓</span> SLA Analysis
+      </a>
+      <a href="#/mttr" class="sb-link" data-page="mttr">
+        <span class="sb-icon">◷</span> MTTR Analysis
+      </a>
+      <a href="#/volume" class="sb-link" data-page="volume">
+        <span class="sb-icon">⌇</span> Volume Trends
+      </a>
+      <a href="#/workload" class="sb-link" data-page="workload">
+        <span class="sb-icon">◧</span> Workload &amp; Aging
+      </a>
+      <a href="#/matrix" class="sb-link" data-page="matrix">
+        <span class="sb-icon">⊞</span> Priority Matrix
+      </a>
+      <a href="#/records" class="sb-link" data-page="records">
+        <span class="sb-icon">☰</span> All Records
+      </a>
+      <div class="sb-divider"></div>
+      <a href="#/new" class="sb-link sb-link-action" data-page="new">
+        <span class="sb-icon">+</span> New ticket
+      </a>
+      <a href="#/settings" class="sb-link sb-link-admin" data-page="settings">
+        <span class="sb-icon">⚙</span> Settings
+      </a>
+    </nav>
+
+    <div class="sb-foot">
+      <div class="sb-foot-row">
+        <span class="sb-foot-key">Records</span>
+        <span class="sb-foot-val" id="sb-record-count">—</span>
+      </div>
+      <div class="sb-foot-row">
+        <span class="sb-foot-key">Refreshed</span>
+        <span class="sb-foot-val" id="sb-refreshed">—</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main content -->
+  <main class="main">
+
+    <!-- Top filter bar (visible on dashboard / analysis pages) -->
+    <div class="topbar" id="topbar">
+      <div class="topbar-title" id="topbar-title">Dashboard</div>
+      <div class="topbar-filters" id="topbar-filters">
+        <div class="filter-group">
+          <label>Year</label>
+          <select id="filter-year"></select>
+        </div>
+        <div class="filter-group">
+          <label>Region</label>
+          <select id="filter-region"></select>
+        </div>
+        <div class="filter-group">
+          <label>Priority</label>
+          <select id="filter-priority"></select>
+        </div>
+        <button class="btn-ghost" id="filter-reset">Reset</button>
+      </div>
+    </div>
+
+    <!-- Page mount -->
+    <div id="page" class="page"></div>
+
+  </main>
+</div>
+
+<!-- Admin gate modal -->
+<div id="admin-gate" class="modal hidden">
+  <div class="modal-card">
+    <div class="modal-title">Admin access required</div>
+    <p class="modal-body">Settings and data editing are protected. Enter the admin password to continue.</p>
+    <input id="admin-pwd" type="password" placeholder="Admin password" autocomplete="off">
+    <div id="admin-err" class="gate-err"></div>
+    <div class="modal-actions">
+      <button class="btn-ghost" id="admin-cancel">Cancel</button>
+      <button class="btn-primary" id="admin-submit">Unlock</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast" class="toast hidden"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
