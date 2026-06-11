@@ -436,9 +436,9 @@ function renderDashboard() {
 
     <div class="section">
       <div class="section-head">
-        <div class="section-title">Top customers &amp; owners</div>
+        <div class="section-title">Customers · Submitters · Responders</div>
       </div>
-      <div class="grid-2">
+      <div class="grid-3">
         <div class="panel">
           <div class="panel-head">
             <div class="panel-title">Top 5 customers by volume</div>
@@ -447,7 +447,15 @@ function renderDashboard() {
         </div>
         <div class="panel">
           <div class="panel-head">
-            <div class="panel-title">Top 5 owners by volume</div>
+            <div class="panel-title">Top 5 submitters by volume</div>
+            <div class="panel-note">Who is filing tickets</div>
+          </div>
+          <div class="chart-box"><canvas id="ch-submitters"></canvas></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head">
+            <div class="panel-title">Top 5 responders</div>
+            <div class="panel-note">Volume + SLA compliance</div>
           </div>
           <div class="chart-box"><canvas id="ch-owners"></canvas></div>
         </div>
@@ -461,6 +469,7 @@ function renderDashboard() {
   buildRegionChart(filtered);
   buildTrendChart(filtered);
   buildTopCustomersChart(filtered);
+  buildTopSubmittersChart(filtered);
   buildTopOwnersChart(filtered);
 
   setupFilterListeners();
@@ -611,28 +620,78 @@ function buildTopCustomersChart(records) {
   STATE.charts.customers = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: top.map(t => t[0].length > 28 ? t[0].slice(0,28)+'…' : t[0]),
+      labels: top.map(t => t[0].length > 22 ? t[0].slice(0,22)+'…' : t[0]),
       datasets: [{ data: top.map(t => t[1]), backgroundColor: C.steel, borderRadius: 4 }]
     },
     options: { ...chartDefaults(), indexAxis: 'y', plugins: { ...chartDefaults().plugins, legend: { display: false } } }
   });
 }
 
-function buildTopOwnersChart(records) {
+function buildTopSubmittersChart(records) {
   const counts = {};
   records.forEach(r => {
-    const o = r.resolved_by || '—';
-    counts[o] = (counts[o]||0) + 1;
+    const s = r.created_by || '—';
+    counts[s] = (counts[s]||0) + 1;
   });
   const top = Object.entries(counts).sort((a,b) => b[1]-a[1]).slice(0,5);
-  const ctx = $('#ch-owners').getContext('2d');
-  STATE.charts.owners = new Chart(ctx, {
+  const ctx = $('#ch-submitters').getContext('2d');
+  STATE.charts.submitters = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: top.map(t => t[0].length > 28 ? t[0].slice(0,28)+'…' : t[0]),
-      datasets: [{ data: top.map(t => t[1]), backgroundColor: C.burnt, borderRadius: 4 }]
+      labels: top.map(t => t[0].length > 22 ? t[0].slice(0,22)+'…' : t[0]),
+      datasets: [{ data: top.map(t => t[1]), backgroundColor: C.sage, borderRadius: 4 }]
     },
     options: { ...chartDefaults(), indexAxis: 'y', plugins: { ...chartDefaults().plugins, legend: { display: false } } }
+  });
+}
+
+function buildTopOwnersChart(records) {
+  // Per-owner: volume + SLA compliance %
+  const stats = {};
+  records.forEach(r => {
+    const o = r.resolved_by || '—';
+    if (!stats[o]) stats[o] = { total: 0, compliant: 0, breached: 0 };
+    stats[o].total++;
+    if (r._slaCompliant === 'Compliant') stats[o].compliant++;
+    if (r._slaCompliant === 'Breached')  stats[o].breached++;
+  });
+  const arr = Object.entries(stats).map(([name, s]) => ({
+    name,
+    total: s.total,
+    compRate: (s.compliant + s.breached) > 0 ? (s.compliant / (s.compliant + s.breached)) * 100 : null
+  })).sort((a,b) => b.total - a.total).slice(0, 5);
+
+  const ctx = $('#ch-owners').getContext('2d');
+  STATE.charts.owners = new Chart(ctx, {
+    data: {
+      labels: arr.map(t => t.name.length > 20 ? t.name.slice(0,20)+'…' : t.name),
+      datasets: [
+        { type: 'bar', label: 'Volume', data: arr.map(t => t.total), backgroundColor: C.burnt, borderRadius: 4, xAxisID: 'x', order: 2 },
+        { type: 'line', label: 'Compliance %', data: arr.map(t => t.compRate), borderColor: C.ink, backgroundColor: C.ink, xAxisID: 'x1', pointRadius: 4, pointBackgroundColor: C.ink, borderWidth: 0, showLine: false, order: 1 }
+      ]
+    },
+    options: {
+      ...chartDefaults(),
+      indexAxis: 'y',
+      plugins: {
+        ...chartDefaults().plugins,
+        legend: { display: true, position: 'bottom', labels: { font: { family: 'Inter', size: 10 }, color: C.text3, boxWidth: 8, boxHeight: 8, padding: 8 } },
+        tooltip: {
+          ...chartDefaults().plugins.tooltip,
+          callbacks: {
+            label: (ctx) => {
+              if (ctx.dataset.label === 'Compliance %') return ctx.parsed.x == null ? 'No SLA data' : `Compliance: ${ctx.parsed.x.toFixed(1)}%`;
+              return `Volume: ${ctx.parsed.x}`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: { beginAtZero: true, position: 'bottom', grid: { color: C.line, drawBorder: false }, ticks: { font: { family: 'JetBrains Mono', size: 10 }, color: C.text3 }, title: { display: true, text: 'Volume', font: { family:'Inter', size: 10 }, color: C.text3 } },
+        x1: { beginAtZero: true, max: 100, position: 'top', grid: { drawOnChartArea: false }, ticks: { font: { family: 'JetBrains Mono', size: 10 }, color: C.text3, callback: v => v + '%' }, title: { display: true, text: 'Compliance %', font: { family:'Inter', size: 10 }, color: C.text3 } },
+        y: { grid: { display: false }, ticks: { font: { family: 'Inter', size: 11 }, color: C.text3 } }
+      }
+    }
   });
 }
 
@@ -1364,8 +1423,11 @@ function renderRecords() {
       rs = rs.filter(r => 
         (r.id || '').toLowerCase().includes(q) ||
         (r.request_title || '').toLowerCase().includes(q) ||
+        (r.ticket_summary || '').toLowerCase().includes(q) ||
+        (r.response_summary || '').toLowerCase().includes(q) ||
         (r.customer || '').toLowerCase().includes(q) ||
         (r.resolved_by || '').toLowerCase().includes(q) ||
+        (r.created_by || '').toLowerCase().includes(q) ||
         (r.region || '').toLowerCase().includes(q) ||
         (r.country || '').toLowerCase().includes(q)
       );
@@ -1530,6 +1592,11 @@ function openRecordModal(id, editable=false) {
             <input type="text" id="f-title" value="${escapeHtml(rec.request_title || '')}" ${ro}>
           </div>
 
+          <div class="field field-full">
+            <label>Ticket summary <span style="color:var(--text-4);font-weight:400;">(optional, ~100 chars)</span></label>
+            <input type="text" id="f-summary" value="${escapeHtml(rec.ticket_summary || '')}" maxlength="120" placeholder="One-line summary of the request" ${ro}>
+          </div>
+
           <div class="field">
             <label>Customer</label>
             <select id="f-customer" ${ro}>${opt(rec.customer, D.Customer || [])}</select>
@@ -1570,16 +1637,17 @@ function openRecordModal(id, editable=false) {
           </div>
 
           <div class="field">
-            <label>Created on</label>
-            <input type="date" id="f-created" value="${(rec.created_on||'').slice(0,10)}" ${ro}>
+            <label>Created on (date &amp; time)</label>
+            <input type="datetime-local" id="f-created" value="${toInputDateTime(rec.created_on)}" ${ro}>
           </div>
           <div class="field">
-            <label>Response date</label>
-            <input type="date" id="f-response" value="${(rec.response_date||'').slice(0,10)}" ${ro}>
+            <label>Response date (date &amp; time)</label>
+            <input type="datetime-local" id="f-response" value="${toInputDateTime(rec.response_date)}" ${ro}>
           </div>
           <div class="field">
-            <label>Acceptance date</label>
-            <input type="date" id="f-acceptance" value="${(rec.acceptance_date||'').slice(0,10)}" ${ro}>
+            <label>Acceptance date (date &amp; time)</label>
+            <input type="datetime-local" id="f-acceptance" value="${toInputDateTime(rec.acceptance_date)}" ${ro}>
+            <small style="font-size:10px;color:var(--text-3);font-style:italic;margin-top:2px;">Fill only when ticket is resolved/closed</small>
           </div>
 
           <div class="field">
@@ -1607,6 +1675,11 @@ function openRecordModal(id, editable=false) {
           <div class="field field-full">
             <label>Description</label>
             <textarea id="f-desc" ${ro}>${escapeHtml(rec.request_description || '')}</textarea>
+          </div>
+
+          <div class="field field-full">
+            <label>Response summary <span style="color:var(--text-4);font-weight:400;">(optional, ~200 chars — fill when resolved)</span></label>
+            <textarea id="f-respsummary" maxlength="240" placeholder="Brief summary of the resolution / answer provided" style="min-height:55px;" ${ro}>${escapeHtml(rec.response_summary || '')}</textarea>
           </div>
         </div>
 
@@ -1643,6 +1716,7 @@ function saveRecord(isNew, existingId) {
     country: $('#f-country').value,
     customer: $('#f-customer').value,
     request_title: $('#f-title').value,
+    ticket_summary: $('#f-summary') ? $('#f-summary').value : '',
     priority: $('#f-priority').value,
     status_reason: $('#f-status').value,
     response_done: $('#f-respdone').value,
@@ -1659,6 +1733,7 @@ function saveRecord(isNew, existingId) {
     npt_reduction: $('#f-npt').value,
     production_recovery: $('#f-prod').value,
     request_description: $('#f-desc').value,
+    response_summary: $('#f-respsummary') ? $('#f-respsummary').value : '',
     attachment_url: $('#f-attachment').value
   };
 
@@ -1933,6 +2008,7 @@ function normalizeImportRow(r) {
     country: get('country','Country'),
     customer: get('customer','Customer'),
     request_title: get('request_title','Request Title','Title'),
+    ticket_summary: get('ticket_summary','Ticket Summary','Summary'),
     priority: get('priority','Priority'),
     status_reason: get('status_reason','Status Reason','Status'),
     response_done: get('response_done','Response Done'),
@@ -1949,19 +2025,53 @@ function normalizeImportRow(r) {
     npt_reduction: get('npt_reduction','NPT Reduction'),
     production_recovery: get('production_recovery','Production Recovery'),
     request_description: get('request_description','Request Description','Description'),
+    response_summary: get('response_summary','Response Summary'),
     attachment_url: get('attachment_url','Attachment URL','Link')
   };
 }
 
 function normalizeDate(v) {
   if (!v) return '';
+  // Preserve full datetime if present (ISO format: YYYY-MM-DDTHH:MM:SS or YYYY-MM-DDTHH:MM)
+  // If only date is given, default to 09:00 to avoid timezone-induced day shifts
+  if (typeof v === 'string') {
+    const trimmed = v.trim();
+    if (!trimmed) return '';
+    // If already looks like an ISO datetime, normalize to YYYY-MM-DDTHH:MM
+    if (trimmed.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/)) {
+      return trimmed.slice(0, 16);
+    }
+    // If date-only YYYY-MM-DD, add 09:00 default
+    if (trimmed.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      return trimmed + 'T09:00';
+    }
+  }
+  // Try to parse as Date
   const d = new Date(v);
-  if (isNaN(d)) return v;
-  return d.toISOString().slice(0,10);
+  if (isNaN(d)) return '';
+  // Return as YYYY-MM-DDTHH:MM (local-time ISO without seconds)
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// Convert a stored datetime string into the format an <input type="datetime-local"> expects: YYYY-MM-DDTHH:MM
+function toInputDateTime(v) {
+  if (!v) return '';
+  const s = String(v).trim();
+  if (!s) return '';
+  // Already correct format
+  if (s.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/)) return s.slice(0, 16);
+  // Date-only — add T09:00 so the input shows it correctly
+  if (s.match(/^\d{4}-\d{2}-\d{2}$/)) return s + 'T09:00';
+  // Try parse and re-format
+  const d = new Date(s);
+  if (isNaN(d)) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function exportCSV() {
-  const headers = ['id','region','country','customer','request_title','priority','status_reason','response_done','category','sub_category','created_by','resolved_by','sla_status','created_on','response_date','acceptance_date','request_type','cost_optimized','npt_reduction','production_recovery','request_description','attachment_url'];
+  const headers = ['id','region','country','customer','request_title','ticket_summary','priority','status_reason','response_done','category','sub_category','created_by','resolved_by','sla_status','created_on','response_date','acceptance_date','request_type','cost_optimized','npt_reduction','production_recovery','request_description','response_summary','attachment_url'];
   const csv = Papa.unparse({ fields: headers, data: STATE.records.map(r => headers.map(h => r[h] || '')) });
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   download(blob, `techhub_export_${new Date().toISOString().slice(0,10)}.csv`);
@@ -1969,8 +2079,8 @@ function exportCSV() {
 }
 
 function exportXLSX() {
-  const headers = ['ID','Region','Country','Customer','Request Title','Priority','Status','Response Done','Category','Sub-Category','Created By','Resolved By','SLA Status','Created On','Response Date','Acceptance Date','Request Type','Cost Optimized','NPT Reduction','Production Recovery','Description','Attachment URL'];
-  const data = [headers, ...STATE.records.map(r => [r.id,r.region,r.country,r.customer,r.request_title,r.priority,r.status_reason,r.response_done,r.category,r.sub_category,r.created_by,r.resolved_by,r.sla_status,r.created_on,r.response_date,r.acceptance_date,r.request_type,r.cost_optimized,r.npt_reduction,r.production_recovery,r.request_description,r.attachment_url])];
+  const headers = ['ID','Region','Country','Customer','Request Title','Ticket Summary','Priority','Status','Response Done','Category','Sub-Category','Created By','Resolved By','SLA Status','Created On','Response Date','Acceptance Date','Request Type','Cost Optimized','NPT Reduction','Production Recovery','Description','Response Summary','Attachment URL'];
+  const data = [headers, ...STATE.records.map(r => [r.id,r.region,r.country,r.customer,r.request_title,r.ticket_summary,r.priority,r.status_reason,r.response_done,r.category,r.sub_category,r.created_by,r.resolved_by,r.sla_status,r.created_on,r.response_date,r.acceptance_date,r.request_type,r.cost_optimized,r.npt_reduction,r.production_recovery,r.request_description,r.response_summary,r.attachment_url])];
   const ws = XLSX.utils.aoa_to_sheet(data);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Tech Hub Records');
