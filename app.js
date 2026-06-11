@@ -36,20 +36,116 @@ const COUNTRY_TO_REGION = {
   'Sudan': 'Africa'
 };
 
+// Category → Sub-Category cascade map (from APC Active Sub-Category master list)
+const CATEGORY_TO_SUBCATEGORY = {
+  'Application Engineering': [
+    'APC Equipment Portfolio',
+    'APC Equipment Specification',
+    'Advanced ESP Design',
+    'DIFA',
+    'Operational Performance Optimization',
+    'Standard ESP Design',
+    'Technical Design Solutions',
+    'Third-Party Technical Solutions'
+  ],
+  'Field Service / Rig related': [
+    '3rd party products and services',
+    'Commissioning',
+    'Equipment Handling',
+    'FS Tools Drawing',
+    'FS reporting',
+    'Installation',
+    'Location layout and setup',
+    'Pulling',
+    'Start-up & Commissioning',
+    'Tooling and consumables',
+    'Troubleshooting'
+  ],
+  'Manufacturing, Assembly, Repair and Test': [
+    'ESP Disassembly Tool',
+    'Inspection / Quality',
+    'Inspection Services',
+    'Machining',
+    'Repair',
+    'Test',
+    'Tooling and equipment',
+    'Warehousing'
+  ],
+  'Operations & Troubleshooting': [
+    'Diagnostic Guidance / Case Matching',
+    'Failure declarations',
+    'Production Optimization & Performance Analysis'
+  ],
+  'R&D Downhole Equipment': [
+    'Existing product',
+    'GasSep/intake',
+    'MLE-Power Connector',
+    'Manufacturing/quality',
+    'Motor',
+    'Product Development',
+    'Protector',
+    'Pump',
+    'Sustaining'
+  ],
+  'Surface Equipment - APC': [
+    'Hardware related',
+    'SE Maintenance',
+    'SE Troubleshooting',
+    'Software related'
+  ],
+  'Teardown & Analysis': [
+    'Dismantle process',
+    'Final DIFA report',
+    'Primary Failure Report /PFR',
+    'RCFA'
+  ],
+  'Test Category': [
+    'Test Sub-Category'
+  ]
+};
+
+// Priority → Request Type cascade map (from GOS Priority Matrix)
+const PRIORITY_TO_REQUEST_TYPE = {
+  'Critical (6 Hours)': [
+    'Operational job in progress (Rig Up / Running)',
+    'High production deferment (NPT / ID related)',
+    'Risk of losing well or equipment',
+    'Well control / safety risk'
+  ],
+  'High (1 Working day)': [
+    'Production reduced or stopped (No NPT / ID related)',
+    'Field troubleshooting needed (not rig-dependent)',
+    'High-value customer deliverable with deadline',
+    'Technical clarification blocking confirmed opportunity'
+  ],
+  'Medium (3 Working days)': [
+    'Engineering clarifications',
+    'Design support not tied to active rig jobs',
+    'Optimization analysis'
+  ],
+  'Low (5 Working days)': [
+    'Upcoming tender / project',
+    'Post-job documentation',
+    'Process improvement',
+    'RCFA report',
+    'Training / documentation requests'
+  ]
+};
+
 // Default dropdowns
 const DEFAULT_DROPDOWNS = {
   Region:        ['Kuwait','Middle East','Latin America','Africa'],
   Country:       Object.keys(COUNTRY_TO_REGION),
   Priority:      Object.keys(DEFAULT_SLA),
-  Category:      ['Application Engineering','Field Service / Rig related','Manufacturing, Assembly, Repair and Test'],
-  SubCategory:   [],
+  Category:      Object.keys(CATEGORY_TO_SUBCATEGORY),
+  SubCategory:   [].concat(...Object.values(CATEGORY_TO_SUBCATEGORY)).sort(),
   StatusReason:  ['Resolved','Resolved (Automatically)'],
   ResponseDone:  ['Yes','No','Answered before','Need more information'],
   SLAStatus:     ['Succeeded','Noncompliant','Canceled','In Progress'],
   Customer:      [],
   CreatedBy:     [],
   ResolvedBy:    [],
-  RequestType:   [],
+  RequestType:   [].concat(...Object.values(PRIORITY_TO_REQUEST_TYPE)),
   ImpactFlag:    ['Yes','No','N/A']
 };
 
@@ -1702,6 +1798,51 @@ function openRecordModal(id, editable=false) {
   $('#f-country').addEventListener('change', e => {
     const c = e.target.value;
     if (COUNTRY_TO_REGION[c]) $('#f-region').value = COUNTRY_TO_REGION[c];
+  });
+
+  // Cascade helper: rebuild a child dropdown's options based on a parent value's mapping.
+  // "Smart" mode: if no parent picked, show full master list. Otherwise show only mapped options.
+  function applyCascade(childSelectId, parentValue, mappingTable, fullMasterList) {
+    const childSel = $(childSelectId);
+    if (!childSel) return;
+    const currentVal = childSel.value;
+    const allowed = parentValue && mappingTable[parentValue]
+      ? mappingTable[parentValue]
+      : (fullMasterList || []);
+    // Keep current value visible as an extra option if it isn't in the new allowed list
+    // (so editing old records doesn't lose data)
+    const allowedSet = new Set(allowed);
+    const extras = currentVal && !allowedSet.has(currentVal) ? [currentVal] : [];
+    const sorted = [...allowed].sort();
+    let html = `<option value="">—</option>`;
+    sorted.forEach(o => {
+      html += `<option value="${escapeHtml(o)}"${o === currentVal ? ' selected' : ''}>${escapeHtml(o)}</option>`;
+    });
+    extras.forEach(o => {
+      html += `<option value="${escapeHtml(o)}" selected>${escapeHtml(o)} (legacy)</option>`;
+    });
+    childSel.innerHTML = html;
+  }
+
+  // Initialize cascades on form open (so existing records' sub-cat / request-type lists
+  // are filtered immediately based on their current Category / Priority).
+  // When no parent is selected, show a UNION of the master list and any legacy values in current data.
+  const masterSubList = [].concat(...Object.values(CATEGORY_TO_SUBCATEGORY));
+  const fullSubList = [...new Set([...masterSubList, ...(D.SubCategory || [])])];
+  const masterTypeList = [].concat(...Object.values(PRIORITY_TO_REQUEST_TYPE));
+  const fullTypeList = [...new Set([...masterTypeList, ...(D.RequestType || [])])];
+
+  applyCascade('#f-subcategory', $('#f-category').value, CATEGORY_TO_SUBCATEGORY, fullSubList);
+  applyCascade('#f-type',        $('#f-priority').value, PRIORITY_TO_REQUEST_TYPE, fullTypeList);
+
+  // Category → Sub-Category cascade
+  $('#f-category').addEventListener('change', e => {
+    applyCascade('#f-subcategory', e.target.value, CATEGORY_TO_SUBCATEGORY, fullSubList);
+  });
+
+  // Priority → Request Type cascade
+  $('#f-priority').addEventListener('change', e => {
+    applyCascade('#f-type', e.target.value, PRIORITY_TO_REQUEST_TYPE, fullTypeList);
   });
 
   if (editable) {
